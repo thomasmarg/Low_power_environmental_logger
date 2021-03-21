@@ -1,9 +1,26 @@
-/* Arduino example sketch to control a JSN-SR04T ultrasonic distance sensor with Arduino. No library needed. More info: https://www.makerguides.com */
+// Arduino script for running low power environmental logger, the design of the logger was adapted from the cave perl perl project
+//I take no credit for any of the libarys used in this script and but did spend ages putting the scrip itself together, hope others find this code useful for their own projects.
+
+//to use this code you will first need to install the following libaries with the latest versions at the time of writing (01/01/2021):
+//http://librarymanager/All#SparkFun_MS5803-14BA - pressure sensor
+//http://librarymanager/All#RTClib - real time clock
+//http://librarymanager/All#SSD1306Ascii - display
+//http://librarymanager/All#SPI - SD card code should already be included
+//http://librarymanager/All#SD - also SD card code should also be included
+//https://github.com/rocketscream/Low-Power - for powering down until interupt
+
+//Edit code below for logger configuration-----------------------------------------------
+int intial_runs = 10; //define the number of samples you want the logger to take in the intial rapid sampling phase.
+
+//define the number of hours mins and seconds between readings.
+int hrs = 0;
+int mins = 1;
+int secs = 0;
+//---------------------------------------------------------------------------------------
+
 //Pressure sensor code-------------------------------------------
-// Define variables for pressure sensor:
 #include <Wire.h>
 #include <SparkFun_MS5803_I2C.h> // Click here to get the library: http://librarymanager/All#SparkFun_MS5803-14BA
-
 MS5803 sensor(ADDRESS_HIGH);
 
 //Create variables to store results
@@ -12,10 +29,12 @@ double pressure_abs, depth, pressure_baseline;
 //------------------------------------------------------
 
 
-//RTC code----------------------------------------------
+//RTC code for clock reset and reading realtime----------------------------------------------
 #include <Wire.h>
 #include "RTClib.h" //libary containing real time clock code
 RTC_DS3231 rtc;
+// the pin that is connected to SQW for interupt
+#define CLOCK_INTERRUPT_PIN 2
 //------------------------------------------------------
 
 ////Display code------------------------------------------
@@ -35,17 +54,8 @@ File CavedataLog;
 //------------------------------------------------------
 
 // Define Power variables
-int flag; //for signaling module power on/off to make device more efficent when screen is no longer in use
-int sensorpowerpin = 10; //pin for powering ulta sonic sensor
-int ledpowerpin = 7; //pin for powering display
-int rtcpowerpin = 9; //pin for powering all the peripheral devices sensors ect, but not the memory card slot
-
-#include <Sleep_n0m1.h>
-int count = 0;
-Sleep sleep;
-unsigned long sleepTime_1; //how long you want the arduino to sleep
-unsigned long sleepTime_2; //how long you want the arduino to sleep
-
+int ledpowerpin = 7; //pin for powering indicator LED
+#include "LowPower.h"
 //---------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -60,21 +70,10 @@ void setup() {
   //------------------------------------------------------------------------
 
   //Define power pins
-  pinMode(sensorpowerpin, OUTPUT);
   pinMode(ledpowerpin, OUTPUT);
-  pinMode(rtcpowerpin, OUTPUT);
-  digitalWrite(ledpowerpin, HIGH);//turn on display power
-  digitalWrite(rtcpowerpin, LOW);//turn on display power
   delay(100);
 
-
-  //Define Sleep code
-  sleepTime_1 = 1000; //set sleep time in ms, max sleep time is 49.7 days
-  //sleepTime_2 = 1000; //set sleep time in ms, max sleep time is 49.7 days
-  sleepTime_2 = 3000; //set sleep time in ms (5min), max sleep time is 49.7 days
-
-
-  // Define pressure sensor code
+  // initalise pressure sensor
   Wire.begin();
   //Retrieve calibration constants for conversion math.
   sensor.reset();
@@ -84,11 +83,37 @@ void setup() {
 
   //------------------------------
   //RTC
-  rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); //to set clock time to time of compile uncomment this line
-  //rtc.disable32K();
-  if (! rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    while (1);
+  //uncomment the line below and upload again after inital upload or it will reset the clock every time you reset the arduino
+  // mrtc.adjust(DateTime(F(__DATE__), F(__TIME__))); //to set clock time to time of compile
+
+  //we don't need the 32K Pin, so disable it
+  rtc.disable32K();
+
+  // Making it so, that the alarm will trigger an interrupt
+  pinMode(CLOCK_INTERRUPT_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(CLOCK_INTERRUPT_PIN), onAlarm, FALLING);
+
+  // set alarm 1, 2 flag to false (so alarm 1, 2 didn't happen so far)
+  // if not done, this easily leads to problems, as both register aren't reset on reboot/recompile
+  rtc.clearAlarm(1);
+  rtc.clearAlarm(2);
+
+  // stop oscillating signals at SQW Pin
+  // otherwise setAlarm1 will fail
+  rtc.writeSqwPinMode(DS3231_OFF);
+
+  // turn off alarm 2 (in case it isn't off already)
+  // again, this isn't done at reboot, so a previously set alarm could easily go overlooked
+  rtc.disableAlarm(2);
+
+  // schedule an alarm a duration of time in the future from now, define at top of script
+  if (!rtc.setAlarm1(
+        rtc.now() + TimeSpan(0, hrs, mins, secs), //sets the delay time in the following format: day, hour, min, second
+        DS3231_A1_Minute // this mode triggers the alarm when the seconds match. See Doxygen for other options
+      )) {
+    Serial.println("Error, alarm wasn't set!");
+  } else {
+    Serial.println("Alarm will happen in 10 seconds!");
   }
   //------------------------------------------------------------------------
 
@@ -117,11 +142,8 @@ void setup() {
   Serial.println("initialization done.");
   oled.println("initialization done.");
   delay(1000);
-  //  //  //-----------------------------------------------------------------------
-  //
-  //  //flag signals when to clear and turn off the oled display,
-  //  //increase this number if you want the display to be on longer after the device is reset
-  flag = 10;
+  //-----------------------------------------------------------------------
+
   //-------------------------------------------------------------------------------------------------------------------------------
 }
 
@@ -129,47 +151,38 @@ void setup() {
 
 
 
-
-
 void loop() {
-  while (flag > 1) {
+  while (intial_runs > 1) {
     check_battery();
-    flag = flag - 1;
-    Serial.print(flag); //prints the flag number over serial for debugging
+    intial_runs = intial_runs - 1;
+    Serial.print(intial_runs); //prints the flag number over serial for debugging
     detect_distance(); //detect distance
-    display_oled(); //request time from RTC and print time/distance to display
-    cavedataLog(); //request time from RTC and save to time/distance to SD card
-    digitalWrite(ledpowerpin, HIGH); //turns off the display power pin
-    delay(100);
-    digitalWrite(ledpowerpin, LOW); //turns off the display power pin
-
-    sleep.pwrDownMode(); //set sleep mode
-    sleep.sleepDelay(sleepTime_1); //sleep for: sleepTime
-
-    if (flag < 2) {
+    display_oled(); //print time/distance/voltage to display
+    cavedataLog(); //save to time/distance/voltage to SD card
+    LED_blink();
+    //adjust sleep code as desired, add sucessive sleep periods for longer sleep times
+    LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF); //sleeps the logger for 2 seconds
+    //LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); //sleeps the logger for 8 seconds
+    //LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); //sleeps the logger for 8 seconds
+    if (intial_runs < 2) {
       oled.clear(); //clear the OLED display
     }
   }
-
   check_battery();
   detect_distance(); //detect distance
   cavedataLog();  //request time from RTC and save to time/distance to SD card
-  sleep.pwrDownMode(); //set sleep mode
-  sleep.sleepDelay(sleepTime_2); //sleep for: sleepTime
-  Serial.print("tewst"); //prints the flag number over serial for debugging
-  digitalWrite(ledpowerpin, HIGH); //turns off the display power pin
-  delay(100);
-  digitalWrite(ledpowerpin, LOW); //turns off the display power pin
-
+  LED_blink();
+  sleep_until_interupt();
+  alarm_reset();
 }
 
 
 
 
 
+//The following are functions called during void loop--------------------------------------------------------------------------
 
 
-//The following are functions called during the void loop
 //function for writing to SD card--------------------------------------------------------------------------
 void cavedataLog(void) {
   DateTime now = rtc.now();
@@ -286,7 +299,7 @@ void check_battery(void) {
   // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 5V):
   float voltage = sensorValue * (6.6 / 1023.0);
   // print out the value you read:
-  if (voltage < 4.5) {
+  if (voltage < 3.4) {
     oled.clear(); //clear the OLED display
     oled.println("Battery low");
     oled.println();
@@ -298,9 +311,10 @@ void check_battery(void) {
       Serial.println("sleeping");
       Serial.println("sleeping");
       Serial.println("sleeping");
-      sleep.pwrDownMode(); //set sleep mode
-
-
+      digitalWrite(ledpowerpin, LOW); //turns off the display power pin
+      delay(3000);
+      oled.clear(); //clear the OLED display
+      LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     }
   }
   Serial.println("Battery okay");//padding between outputs
@@ -368,5 +382,69 @@ void display_oled(void) {
   oled.print(temperature_c);
   oled.print((char)247);
   oled.print("C");
+
+delay(2000);
+   
+  //display battery voltage
+  
+  // read the input on analog pin 0:
+  int sensorValue = analogRead(A0);
+  // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 5V):
+  float voltage = sensorValue * (6.6 / 1023.0);
+  
+  oled.clear();
+  oled.set1X();
+  oled.println("Battery voltage: ");
+  oled.set2X();
+  oled.print(voltage);
+  oled.print(" V");
+
+  delay(1000);
   //------------------------------
+}
+
+void LED_blink()
+{
+  digitalWrite(ledpowerpin, HIGH); //turns off the display power pin
+  delay(10);
+  digitalWrite(ledpowerpin, LOW); //turns off the LED
+}
+
+void onAlarm() {
+  Serial.println("Alarm occured!");
+}
+
+void sleep_until_interupt() {
+  // Allow wake up pin to trigger interrupt on low.
+  attachInterrupt(0, wakeUp, LOW);
+
+  // Enter power down state with ADC and BOD module disabled.
+  // Wake up when wake up pin is low.
+  LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+
+  // Disable external pin interrupt on wake up pin.
+  detachInterrupt(0);
+}
+
+void wakeUp()
+{
+  // Just a handler for the pin interrupt.
+}
+
+void alarm_reset()
+{
+  // check to see if the alarm flag is set (also resets the flag if set)
+  if (rtc.alarmFired(1)) {
+    rtc.clearAlarm(1);
+    Serial.println("Alarm cleared");
+  }
+  // schedule an alarm 10 seconds in the future
+  if (!rtc.setAlarm1(
+        rtc.now() + TimeSpan(0, hrs, mins, secs), //sets the delay time in the following format: day, hour, min, second
+        DS3231_A1_Minute // this mode triggers the alarm when the seconds match. See Doxygen for other options
+      )) {
+    Serial.println("Error, alarm wasn't set!");
+  } else {
+    Serial.println("Alarm will happen in 10 seconds!");
+  }
 }

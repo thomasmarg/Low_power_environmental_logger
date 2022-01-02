@@ -49,6 +49,19 @@ RTC_DS3231 rtc;
 #ifdef WITH_DISPLAY
 SSD1306AsciiAvrI2c oled;
 #endif
+
+#ifdef DEBUG
+// Open serial communications and wait for port to open:
+// wait for serial port to connect. Needed for native USB port only
+
+#define DEBUG_INIT() Serial.begin(9600);while (!Serial) {}
+#define DEBUG_PRINT(X) Serial.print(X)
+#define DEBUG_PRINTLN(X) Serial.println(X)
+#else
+#define DEBUG_INIT()
+#define DEBUG_PRINT(X)
+#define DEBUG_PRINTLN(X)
+#endif
 //------------------------------------------------------
 
 //SD card code------------------------------------------
@@ -73,7 +86,7 @@ void cavedataLog(void) {
 
     // if the file opened okay, write to it:
     if (CavedataLog) {
-        Serial.print("Writing to test.txt...");
+        DEBUG_PRINT("Writing to test.txt...");
 
         CavedataLog.print(now.year(), DEC);
         CavedataLog.print('/');
@@ -126,17 +139,17 @@ void cavedataLog(void) {
         CavedataLog.print(", ");
         CavedataLog.print(voltage);
         CavedataLog.println("");
-        Serial.println(" ");
-        Serial.print("Voltage: ");
-        Serial.print(voltage);
+        DEBUG_PRINTLN(" ");
+        DEBUG_PRINT("Voltage: ");
+        DEBUG_PRINT(voltage);
 
 
         // close the file:
         CavedataLog.close();
-        Serial.println(" ");
+        DEBUG_PRINTLN(" ");
     } else {
         // if the file didn't open, print an error:
-        Serial.println("error opening test.txt");
+        DEBUG_PRINTLN("error opening test.txt");
     }
     //you have to close this one before opening another.
     CavedataLog.close();
@@ -159,18 +172,19 @@ void detect_distance(void) {
     depth =  -(pressure_baseline - pressure_abs);
 #endif
     // Report values via UART
-    Serial.print("Temperature C = ");
-    Serial.println(temperature_c);
+    DEBUG_PRINT("Temperature C = ");
+    DEBUG_PRINTLN(temperature_c);
 
-    Serial.print("Pressure abs (mbar)= ");
-    Serial.println(pressure_abs);
+    DEBUG_PRINT("Pressure abs (mbar)= ");
+    DEBUG_PRINTLN(pressure_abs);
 #ifdef DEPTH_SENSOR
-    Serial.print("Depth (cm) = ");
-    Serial.println(depth);
-#endif
-    Serial.println("done.");
+    DEBUG_PRINT("Depth (cm) = ");
+    DEBUG_PRINTLN(depth);
+#endif    
+    DEBUG_PRINTLN("done.");
 
-    Serial.println(" ");//padding between outputs
+
+    DEBUG_PRINTLN(" ");//padding between outputs
 }
 //------------------------------------------------------------------------------------------------------------
 
@@ -192,12 +206,12 @@ void check_battery(void) {
         oled.println("shutting down");
 #endif
         CavedataLog.print("Battery low shutting down");
-        Serial.println("Battery low shutting down");//padding between outputs
+        DEBUG_PRINTLN("Battery low shutting down");//padding between outputs
         delay(500);
         while (voltage < 10) {
-            Serial.println("sleeping");
-            Serial.println("sleeping");
-            Serial.println("sleeping");
+            DEBUG_PRINTLN("sleeping");
+            DEBUG_PRINTLN("sleeping");
+            DEBUG_PRINTLN("sleeping");
             digitalWrite(ledpowerpin, LOW); //turns off the display power pin
             delay(3000);
 #ifdef WITH_DISPLAY
@@ -206,7 +220,7 @@ void check_battery(void) {
             LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
         }
     }
-    Serial.println("Battery okay");//padding between outputs
+    DEBUG_PRINTLN("Battery okay");//padding between outputs
 #ifdef WITH_DISPLAY
     oled.clear(); //clear the OLED display
 #endif
@@ -259,9 +273,9 @@ void display_oled(void) {
     oled.print(now.second(), DEC);
 
     oled.println();
-    Serial.print("Temperature: ");
-    Serial.print(rtc.getTemperature());
-    Serial.println(" C");
+    DEBUG_PRINT("Temperature: ");
+    DEBUG_PRINT(rtc.getTemperature());
+    DEBUG_PRINTLN(" C");
     oled.println();
     //------------------------------
 
@@ -306,7 +320,7 @@ void LED_blink()
 }
 
 void onAlarm() {
-    Serial.println("Alarm occured!");
+    DEBUG_PRINTLN("Alarm occured!");
 }
 void wakeUp()
 {
@@ -331,31 +345,23 @@ void alarm_reset()
     // check to see if the alarm flag is set (also resets the flag if set)
     if (rtc.alarmFired(1)) {
         rtc.clearAlarm(1);
-        Serial.println("Alarm cleared");
+        DEBUG_PRINTLN("Alarm cleared");
     }
     // schedule an alarm 10 seconds in the future
     if (!rtc.setAlarm1(
                        rtc.now() + TimeSpan(0, hrs, mins, secs), //sets the delay time in the following format: day, hour, min, second
                        DS3231_A1_Minute // this mode triggers the alarm when the seconds match. See Doxygen for other options
                        )) {
-        Serial.println("Error, alarm wasn't set!");
+        DEBUG_PRINTLN("Error, alarm wasn't set!");
     } else {
-        Serial.println("Alarm will happen in 10 seconds!");
+        DEBUG_PRINTLN("Alarm will happen in 10 seconds!");
     }
 }
 
 
 //---------------------------------------------------------------------------------------------------------------------------------
-
-
-
 void setup() {
-
-    // Open serial communications and wait for port to open:
-    Serial.begin(9600);
-    while (!Serial) {
-        ; // wait for serial port to connect. Needed for native USB port only
-    }
+    DEBUG_INIT();
     //------------------------------------------------------------------------
 
     //Define power pins
@@ -401,9 +407,9 @@ void setup() {
                        rtc.now() + TimeSpan(0, hrs, mins, secs), //sets the delay time in the following format: day, hour, min, second
                        DS3231_A1_Minute // this mode triggers the alarm when the seconds match. See Doxygen for other options
                        )) {
-        Serial.println("Error, alarm wasn't set!");
+        DEBUG_PRINTLN("Error, alarm wasn't set!");
     } else {
-        Serial.println("Alarm will happen in 10 seconds!");
+        DEBUG_PRINTLN("Alarm will happen in 10 seconds!");
     }
     //------------------------------------------------------------------------
 
@@ -423,18 +429,18 @@ void setup() {
 #endif
 
     //  //SD card code------------------------------------------------------------
-    Serial.print("Initializing SD card...");
+    DEBUG_PRINT("Initializing SD card...");
 
     delay(500);
 
     if (!SD.begin(4)) {
-        Serial.println("initialization failed!");
+        DEBUG_PRINTLN("initialization failed!");
 #ifdef WITH_DISPLAY
         oled.println("initialization failed!");
 #endif
         while (1);
     }
-    Serial.println("initialization done.");
+    DEBUG_PRINTLN("initialization done.");
 #ifdef WITH_DISPLAY
     oled.println("initialization done.");
 #endif
@@ -452,7 +458,7 @@ void loop() {
     while (intial_runs > 1) {
         check_battery();
         intial_runs = intial_runs - 1;
-        Serial.print(intial_runs); //prints the flag number over serial for debugging
+        DEBUG_PRINT(intial_runs); //prints the flag number over serial for debugging
         detect_distance(); //detect distance
         display_oled(); //print time/distance/voltage to display
         cavedataLog(); //save to time/distance/voltage to SD card

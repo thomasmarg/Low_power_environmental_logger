@@ -35,15 +35,18 @@ RTC_DS3231 rtc;
 // the pin that is connected to SQW for interupt
 #define CLOCK_INTERRUPT_PIN 2
 //------------------------------------------------------
-
+#ifdef WITH_DISPLAY
 ////Display code------------------------------------------
 #include "SSD1306Ascii.h"
 #include "SSD1306AsciiAvrI2c.h"
+#endif
 // 0X3C+SA0 - 0x3C or 0x3D
 #define I2C_ADDRESS 0x3C
 // Define proper RST_PIN if required.
 #define RST_PIN -1
+#ifdef WITH_DISPLAY
 SSD1306AsciiAvrI2c oled;
+#endif
 //------------------------------------------------------
 
 //SD card code------------------------------------------
@@ -53,7 +56,7 @@ File CavedataLog;
 //------------------------------------------------------
 
 // Define Power variables
-int ledpowerpin = 7; //pin for powering indicator LED
+int ledpowerpin = 7; //pin for powering DISPLAY (T1)
 #include "LowPower.h"
 
 
@@ -177,10 +180,12 @@ void check_battery(void) {
     float voltage = sensorValue * (6.6 / 1023.0);
     // print out the value you read:
     if (voltage < 3.4) {
+#ifdef WITH_DISPLAY
         oled.clear(); //clear the OLED display
         oled.println("Battery low");
         oled.println();
         oled.println("shutting down");
+#endif
         CavedataLog.print("Battery low shutting down");
         Serial.println("Battery low shutting down");//padding between outputs
         delay(500);
@@ -190,18 +195,23 @@ void check_battery(void) {
             Serial.println("sleeping");
             digitalWrite(ledpowerpin, LOW); //turns off the display power pin
             delay(3000);
+#ifdef WITH_DISPLAY
             oled.clear(); //clear the OLED display
+#endif
             LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
         }
     }
     Serial.println("Battery okay");//padding between outputs
+#ifdef WITH_DISPLAY
     oled.clear(); //clear the OLED display
+#endif
 }
 //------------------------------------------------------------------------------------------------------------
 
 
 //function for printing date time and distance to OLED--------------------------------------------------------
 void display_oled(void) {
+#ifdef WITH_DISPLAY
     //RTC code
     DateTime now = rtc.now();
     oled.clear();
@@ -268,7 +278,6 @@ void display_oled(void) {
     int sensorValue = analogRead(A0);
     // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 5V):
     float voltage = sensorValue * (6.6 / 1023.0);
-  
     oled.clear();
     oled.set1X();
     oled.println("Battery voltage: ");
@@ -278,6 +287,8 @@ void display_oled(void) {
 
     delay(1000);
     //------------------------------
+#endif    
+
 }
 
 void LED_blink()
@@ -388,6 +399,7 @@ void setup() {
     }
     //------------------------------------------------------------------------
 
+#ifdef WITH_DISPLAY
 
     //Display code------------------------------------------------------------
 #if RST_PIN >= 0
@@ -398,20 +410,26 @@ void setup() {
     // Call oled.setI2cClock(frequency) to change from the default frequency.
     oled.setFont(System5x7);
     //------------------------------------------------------------------------
+    oled.println("Initializing SD card...");
 
+#endif
 
     //  //SD card code------------------------------------------------------------
     Serial.print("Initializing SD card...");
-    oled.println("Initializing SD card...");
+
     delay(500);
 
     if (!SD.begin(4)) {
         Serial.println("initialization failed!");
+#ifdef WITH_DISPLAY
         oled.println("initialization failed!");
+#endif
         while (1);
     }
     Serial.println("initialization done.");
+#ifdef WITH_DISPLAY
     oled.println("initialization done.");
+#endif
     delay(1000);
     //-----------------------------------------------------------------------
 
@@ -435,9 +453,11 @@ void loop() {
         LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF); //sleeps the logger for 2 seconds
         //LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); //sleeps the logger for 8 seconds
         //LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); //sleeps the logger for 8 seconds
+#ifdef WITH_DISPLAY
         if (intial_runs < 2) {
             oled.clear(); //clear the OLED display
         }
+#endif        
     }
     check_battery();
     detect_distance(); //detect distance

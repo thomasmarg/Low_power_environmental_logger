@@ -160,7 +160,7 @@ void cavedataLog(void) {
 
 
 //function for triggering sensor and returning distance-------------------------------------------------------
-void detect_distance(void) {
+void measure_data(void) {
     // Read temperature from the sensor in deg C. This operation takes about
     temperature_c = sensor.getTemperature(CELSIUS, ADC_512);
 
@@ -459,7 +459,7 @@ void loop() {
         check_battery();
         intial_runs = intial_runs - 1;
         DEBUG_PRINT(intial_runs); //prints the flag number over serial for debugging
-        detect_distance(); //detect distance
+        measure_data(); //detect distance
         display_oled(); //print time/distance/voltage to display
         cavedataLog(); //save to time/distance/voltage to SD card
         LED_blink();
@@ -474,7 +474,7 @@ void loop() {
 #endif        
     }
     check_battery();
-    detect_distance(); //detect distance
+    measure_data(); //detect distance
     cavedataLog();  //request time from RTC and save to time/distance to SD card
     LED_blink();
     sleep_until_interupt();

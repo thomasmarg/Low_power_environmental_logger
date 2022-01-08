@@ -25,9 +25,15 @@ int secs = 0;
 MS5803 sensor;
 //Create variables to store results
 float temperature_c;
-double pressure_abs;
+float pressure_abs;
+// 
 // Compute the depth based on pressure_baseline
 // #define DEPTH_SENSOR
+//
+// OLED display 
+// #define WITH_DISPLAY
+
+
 #ifdef DEPTH_SENSOR
 double pressure_baseline, depth;
 #endif
@@ -163,11 +169,8 @@ void cavedataLog(void) {
 
 //function for triggering sensor and returning distance-------------------------------------------------------
 void measure_data(void) {
-    // Read temperature from the sensor in deg C. This operation takes about
-    temperature_c = sensor.getTemperature(CELSIUS, ADC_512);
-
-    // Read pressure from the sensor in mbar.
-    pressure_abs = sensor.getPressure(ADC_4096);
+    // Read temperature from the sensor in deg C. and pressure in millibar This operation takes about    
+    sensor.getMeasurements(ADC_4096, CELSIUS, temperature_c, pressure_abs);   
 #ifdef DEPTH_SENSOR
     // Taking our baseline pressure at the beginning we can find an approximate
     // change in altitude based on the differences in pressure.

@@ -18,18 +18,20 @@ int mins = 1;
 int secs = 0;
 //---------------------------------------------------------------------------------------
 
-//Pressure sensor code-------------------------------------------
+//Pressure sensor code
+// based on northernwidget/MS5803 (Supports all sensors variants, the exact variant is defined through the PRESSURE_SENSOR_VARIANT define (see platformio.ini) 
 #include <Wire.h>
-#include <SparkFun_MS5803_I2C.h> // Click here to get the library: http://librarymanager/All#SparkFun_MS5803-14BA
-MS5803 sensor(ADDRESS_HIGH);
+#include <MS5803.h> 
+MS5803 sensor;
 //Create variables to store results
 float temperature_c;
 double pressure_abs;
+// Compute the depth based on pressure_baseline
+// #define DEPTH_SENSOR
 #ifdef DEPTH_SENSOR
 double pressure_baseline, depth;
 #endif
 //------------------------------------------------------
-
 
 //RTC code for clock reset and reading realtime----------------------------------------------
 #include "RTClib.h" //libary containing real time clock code
@@ -370,9 +372,10 @@ void setup() {
 
     // initalise pressure sensor
     Wire.begin();
+   
+    sensor.begin(ADDRESS_HIGH, PRESSURE_SENSOR_VARIANT);
     //Retrieve calibration constants for conversion math.
     sensor.reset();
-    sensor.begin();
 #ifdef DEPTH_SENSOR
     pressure_baseline = sensor.getPressure(ADC_4096);
     //------------------------------------------------------------------------
